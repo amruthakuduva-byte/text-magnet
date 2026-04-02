@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Text Magnet — Alice</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=DM+Mono:ital,wght@1,300&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #0C0A08;
+      --text:   #CBBFA6;
+      --gold:   #B8874A;
+      --muted:  #26221D;
+      --label:  #4A4239;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Cormorant Garamond', serif;
+      cursor: none;
+      min-height: 100vh;
+    }
+
+    /* Film grain */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: -50%;
+      width: 200%;
+      height: 200%;
+      background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='300' height='300' filter='url(%23n)'/></svg>");
+      opacity: 0.048;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Fixed field canvas */
+    #canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    /* Cursor */
+    #cursor-dot {
+      position: fixed;
+      width: 6px;
+      height: 6px;
+      background: var(--gold);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 1000;
+      box-shadow: 0 0 10px 2px rgba(184,135,74,0.55);
+    }
+    #cursor-ring {
+      position: fixed;
+      border: 1px dashed rgba(184,135,74,0.25);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* Vignette */
+    #vignette {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 40%, transparent 30%, rgba(12,10,8,0.72) 100%);
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    /* Page layout */
+    main {
+      position: relative;
+      z-index: 10;
+      max-width: 660px;
+      margin: 0 auto;
+      padding: 7rem 2.5rem 9rem;
+    }
+
+    /* Chapter header */
+    header {
+      margin-bottom: 3.8rem;
+      border-top: 1px solid rgba(184,135,74,0.2);
+      padding-top: 1.6rem;
+    }
+    header .eyebrow {
+      font-family: 'DM Mono', monospace;
+      font-style: italic;
+      font-size: 10px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--gold);
+      opacity: 0.65;
+      margin-bottom: 1.1rem;
+    }
+    header h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 600;
+      font-size: clamp(28px, 4vw, 40px);
+      color: var(--text);
+      line-height: 1.1;
+      letter-spacing: 0.01em;
+    }
+    header h1 em {
+      font-style: italic;
+      font-weight: 400;
+      color: var(--gold);
+    }
+
+    /* Paragraphs */
+    p {
+      font-size: 18.5px;
+      line-height: 1.95;
+      color: var(--text);
+      margin-bottom: 1.9em;
+      user-select: none;
+    }
+
+    .char {
+      display: inline-block;
+      will-change: transform;
+      color: inherit;
+      position: relative;
+    }
+
+    /* Divider */
+    .end-rule {
+      margin-top: 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .end-rule::before,
+    .end-rule::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(184,135,74,0.18);
+    }
+    .end-rule span {
+      font-family: 'DM Mono', monospace;
+      font-style: italic;
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--label);
+    }
+
+    /* Branding */
+    #brand {
+      position: fixed;
+      bottom: 1.8rem;
+      right: 2rem;
+      font-family: 'DM Mono', monospace;
+      font-style: italic;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--label);
+      z-index: 20;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="vignette"></div>
+  <canvas id="canvas"></canvas>
+  <div id="cursor-dot"></div>
+  <div id="cursor-ring"></div>
+
+  <main>
+    <header>
+      <p class="eyebrow">Lewis Carroll · 1865 · Text Magnet</p>
+      <h1>Alice's Adventures<br><em>in Wonderland</em></h1>
+    </header>
+
+    <div id="prose"></div>
+
+    <div class="end-rule"><span>Chapter I</span></div>
+  </main>
+
+  <div id="brand">Text Magnet</div>
+
+  <script>
+    // ── TEXT ────────────────────────────────────────────────────────────────
+    const PARAGRAPHS = [
+      `Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, "and what is the use of a book," thought Alice "without pictures or conversations?"`,
+
+      `So she was considering in her own mind (as well as she could, for the hot day made her feel very sleepy and stupid), whether the pleasure of making a daisy-chain would be worth the trouble of getting up and picking the daisies, when suddenly a White Rabbit with pink eyes ran close by her.`,
+
+      `There was nothing so very remarkable in that; nor did Alice think it so very much out of the way to hear the Rabbit say to itself, "Oh dear! Oh dear! I shall be late!" (when she thought it over afterwards, it occurred to her that she ought to have wondered at this, but at the time it all seemed quite natural); but when the Rabbit actually took a watch out of its waistcoat-pocket, and looked at it, and then hurried on, Alice started to her feet, for it flashed across her mind that she had never before seen a rabbit with either a waistcoat-pocket, or a watch to take out of it, and burning with curiosity, she ran across the field after it, and fortunately was just in time to see it pop down a large rabbit-hole under the hedge.`,
+
+      `In another moment down went Alice after it, never once considering how in the world she was to get out again.`,
+
+      `The rabbit-hole went straight on like a tunnel for some way, and then dipped suddenly down, so suddenly that Alice had not a moment to think about stopping herself before she found herself falling down a very deep well.`,
+    ];
+
+    // ── CONFIG ──────────────────────────────────────────────────────────────
+    const REPEL_RADIUS   = 88;
+    const REPEL_STRENGTH = 18;
+    const SPRING_K       = 0.072;
+    const DAMPING        = 0.68;
+    const ROT_FACTOR     = 2.2;
+    const MAX_ROT        = 22;
+    const REST_THRESH    = 0.08; // skip physics if letter is settled
+
+    const COL_BASE = [203, 191, 166];
+    const COL_HOT  = [184, 135,  74];
+
+    // ── BUILD PROSE ─────────────────────────────────────────────────────────
+    const prose = document.getElementById('prose');
+
+    PARAGRAPHS.forEach(text => {
+      const p = document.createElement('p');
+      [...text].forEach(ch => {
+        const span = document.createElement('span');
+        if (ch === ' ') {
+          // Space: non-breaking span with width, not interactive
+          span.innerHTML = '&nbsp;';
+          span.style.display = 'inline-block';
+        } else {
+          span.className = 'char';
+          span.textContent = ch;
+        }
+        p.appendChild(span);
+      });
+      prose.appendChild(p);
+    });
+
+    // ── CURSOR ──────────────────────────────────────────────────────────────
+    const dot  = document.getElementById('cursor-dot');
+    const ring = document.getElementById('cursor-ring');
+    const RING_D = REPEL_RADIUS * 2;
+    ring.style.width  = RING_D + 'px';
+    ring.style.height = RING_D + 'px';
+
+    let mx = -9999, my = -9999, mouseIn = false;
+
+    // ── MOUSE ────────────────────────────────────────────────────────────────
+    document.addEventListener('mousemove', e => {
+      mx = e.clientX; my = e.clientY;
+      mouseIn = true;
+      dot.style.left  = mx + 'px'; dot.style.top  = my + 'px';
+      ring.style.left = mx + 'px'; ring.style.top = my + 'px';
+    });
+    document.addEventListener('mouseleave', () => {
+      mouseIn = false; mx = -9999; my = -9999;
+    });
+
+    // ── TOUCH ────────────────────────────────────────────────────────────────
+    // Hide cursor elements on touch devices
+    const isTouchDevice = window.matchMedia('(hover: none)').matches;
+    if (isTouchDevice) {
+      dot.style.display  = 'none';
+      ring.style.display = 'none';
+      document.body.style.cursor = 'auto';
+    }
+
+    document.addEventListener('touchstart', e => {
+      const t = e.touches[0];
+      mx = t.clientX; my = t.clientY;
+      mouseIn = true;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', e => {
+      const t = e.touches[0];
+      mx = t.clientX; my = t.clientY;
+      mouseIn = true;
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+      mouseIn = false; mx = -9999; my = -9999;
+    });
+
+    // ── CANVAS ──────────────────────────────────────────────────────────────
+    const canvas = document.getElementById('canvas');
+    const ctx    = canvas.getContext('2d');
+
+    // ── DOT GRID CONFIG ──────────────────────────────────────────────────────
+    const GRID         = 34;
+    const DOT_REPEL    = 120;   // repulsion radius
+    const DOT_STRENGTH = 5.5;
+    const DOT_SPRING   = 0.055;
+    const DOT_DAMP     = 0.60;
+    const DOT_MAX      = 16;
+
+    // Continuous radial wave params — wave always emanates from cursor
+    const WAVE_WAVELENGTH = 68;
+    const WAVE_SPEED      = 0.07;  // slower pulse
+    const WAVE_AMPLITUDE  = 5;    // much gentler
+    const WAVE_RADIUS     = 160;  // tighter radius
+
+    let wavePhase = 0; // global time phase — advances each frame
+
+    // All state declared BEFORE initDots is called
+    let dots = [];
+
+    function initDots() {
+      dots = [];
+      const cols = Math.ceil(canvas.width  / GRID) + 2;
+      const rows = Math.ceil(canvas.height / GRID) + 2;
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          dots.push({ ox: col * GRID, oy: row * GRID, tx: 0, ty: 0, vtx: 0, vty: 0 });
+        }
+      }
+    }
+
+    function resizeCanvas() {
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+      initDots();
+    }
+    resizeCanvas();
+    window.addEventListener('resize', () => { resizeCanvas(); scheduleReinit(); });
+
+    function updateAndDrawDots() {
+      const scrollFrac = window.scrollY % GRID;
+
+      // Advance wave phase every frame — this is what creates the ripple motion
+      if (mouseIn) wavePhase += WAVE_SPEED;
+
+      for (let i = 0; i < dots.length; i++) {
+        const d  = dots[i];
+        const vx = d.ox;
+        const vy = d.oy - scrollFrac;
+
+        // Distance from dot's rest position to cursor
+        const ddx  = vx - mx;
+        const ddy  = vy - my;
+        const dist = Math.hypot(ddx, ddy) || 0.001;
+        const nx   = ddx / dist;
+        const ny   = ddy / dist;
+
+        // ── Repulsion push (same as letters) ──
+        if (mouseIn && dist < DOT_REPEL) {
+          const t     = 1 - dist / DOT_REPEL;
+          const force = t * t * DOT_STRENGTH;
+          d.vtx += nx * force;
+          d.vty += ny * force;
+        }
+
+        // ── Radial wave force — only within WAVE_RADIUS ──
+        // sin(dist/wavelength - globalPhase) gives a wave that appears to
+        // travel outward from the cursor as wavePhase increases
+        if (mouseIn && dist < WAVE_RADIUS) {
+          const falloff   = 1 - dist / WAVE_RADIUS;           // linear fade at edge
+          const waveVal   = Math.sin((dist / WAVE_WAVELENGTH) * Math.PI * 2 - wavePhase);
+          const waveForce = waveVal * falloff * WAVE_AMPLITUDE * 0.18; // 0.18 → force, not position
+          d.vtx += nx * waveForce;
+          d.vty += ny * waveForce;
+        }
+
+        // ── Spring back to rest ──
+        d.vtx += (0 - d.tx) * DOT_SPRING;
+        d.vty += (0 - d.ty) * DOT_SPRING;
+        d.vtx *= DOT_DAMP;
+        d.vty *= DOT_DAMP;
+        d.tx  += d.vtx;
+        d.ty  += d.vty;
+
+        // Clamp max travel
+        const len = Math.hypot(d.tx, d.ty);
+        if (len > DOT_MAX) { d.tx *= DOT_MAX / len; d.ty *= DOT_MAX / len; }
+
+        // ── Draw ──
+        const drawX = vx + d.tx;
+        const drawY = vy + d.ty;
+        if (drawX < -4 || drawX > canvas.width + 4 || drawY < -4 || drawY > canvas.height + 4) continue;
+
+        const lift = Math.min(len / DOT_MAX, 1);
+
+        // Dot: barely visible at rest, only slightly brightens when disturbed
+        const dotR = Math.round(52  + lift * (90 - 52));
+        const dotG = Math.round(46  + lift * (80 - 46));
+        const dotB = Math.round(38  + lift * (65 - 38));
+        const dotA = (0.22 + lift * 0.25).toFixed(2);  // stays dim
+        ctx.beginPath();
+        ctx.arc(drawX, drawY, 1.2 + lift * 0.8, 0, Math.PI * 2); // barely grows
+        ctx.fillStyle = `rgba(${dotR},${dotG},${dotB},${dotA})`;
+        ctx.fill();
+      }
+    }
+
+    // ── LETTER STATE ─────────────────────────────────────────────────────────
+    // Physics are in offset space (tx, ty = displacement from natural position).
+    // Natural viewport position = baseDocY - window.scrollY.
+    // This way scroll is handled for free.
+    let letters = [];
+
+    function initLetters() {
+      const scrollY = window.scrollY;
+      letters = [];
+      document.querySelectorAll('.char').forEach(el => {
+        // Reset any existing transform before measuring
+        el.style.transform = '';
+        el.style.color = '';
+        el.style.textShadow = '';
+        const r = el.getBoundingClientRect();
+        letters.push({
+          el,
+          baseDocX: r.left + r.width  / 2,             // viewport X (no horizontal scroll)
+          baseDocY: r.top  + r.height / 2 + scrollY,   // document Y
+          tx: 0, ty: 0,     // current offset from natural position
+          vtx: 0, vty: 0,   // velocity
+          rot: 0, vrot: 0,
+        });
+      });
+    }
+
+    let reinitTimer = null;
+    function scheduleReinit() {
+      clearTimeout(reinitTimer);
+      reinitTimer = setTimeout(() => initLetters(), 120);
+    }
+
+    // ── COLOR LERP ──────────────────────────────────────────────────────────
+    function lerpColor(a, b, t) {
+      t = Math.max(0, Math.min(1, t));
+      return [
+        Math.round(a[0] + (b[0] - a[0]) * t),
+        Math.round(a[1] + (b[1] - a[1]) * t),
+        Math.round(a[2] + (b[2] - a[2]) * t),
+      ];
+    }
+
+    // ── DRAW FIELD ──────────────────────────────────────────────────────────
+    let phase = 0;
+
+    function drawField() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Always draw + update the dot grid (dots spring back even when mouse is gone)
+      updateAndDrawDots();
+
+      if (!mouseIn) return;
+      phase += 0.035;
+
+      // Glow
+      const g = ctx.createRadialGradient(mx, my, 0, mx, my, REPEL_RADIUS * 1.4);
+      g.addColorStop(0,    'rgba(184,135,74,0.11)');
+      g.addColorStop(0.55, 'rgba(184,135,74,0.04)');
+      g.addColorStop(1,    'rgba(184,135,74,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(mx, my, REPEL_RADIUS * 1.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pulsing boundary ring
+      const pa = 0.10 + 0.06 * Math.sin(phase);
+      ctx.beginPath();
+      ctx.arc(mx, my, REPEL_RADIUS, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(184,135,74,${pa})`;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Radial spokes
+      const N = 14;
+      for (let i = 0; i < N; i++) {
+        const ang = (i / N) * Math.PI * 2 + phase * 0.08;
+        const a   = 0.06 + 0.025 * Math.sin(phase + i * 0.8);
+        ctx.beginPath();
+        ctx.moveTo(mx + Math.cos(ang) * 14, my + Math.sin(ang) * 14);
+        ctx.lineTo(mx + Math.cos(ang) * REPEL_RADIUS * 0.78, my + Math.sin(ang) * REPEL_RADIUS * 0.78);
+        ctx.strokeStyle = `rgba(184,135,74,${a})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+
+    // ── MAIN LOOP ────────────────────────────────────────────────────────────
+    function tick() {
+      drawField();
+
+      const scrollY = window.scrollY;
+
+      for (let i = 0; i < letters.length; i++) {
+        const l = letters[i];
+
+        // Current natural viewport position
+        const natX = l.baseDocX;
+        const natY = l.baseDocY - scrollY;
+
+        // Viewport position of letter right now (natural + offset)
+        const curX = natX + l.tx;
+        const curY = natY + l.ty;
+
+        // Distance from cursor (both in viewport coords)
+        const dx   = curX - mx;
+        const dy   = curY - my;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+
+        // Skip settled, out-of-range letters (perf)
+        const settled = Math.abs(l.tx) + Math.abs(l.ty) < REST_THRESH &&
+                        Math.abs(l.vtx) + Math.abs(l.vty) < REST_THRESH;
+        if (settled && dist >= REPEL_RADIUS) continue;
+
+        // Repulsion
+        if (dist < REPEL_RADIUS) {
+          const t     = 1 - dist / REPEL_RADIUS;
+          const force = t * t * REPEL_STRENGTH;
+          const nx    = dx / dist;
+          const ny    = dy / dist;
+          l.vtx  += nx * force;
+          l.vty  += ny * force;
+          l.vrot += nx * t * ROT_FACTOR;
+        }
+
+        // Spring back to (0, 0) offset
+        l.vtx  += (0 - l.tx)  * SPRING_K;
+        l.vty  += (0 - l.ty)  * SPRING_K;
+        l.vrot += (0 - l.rot) * 0.10;
+
+        // Damp
+        l.vtx  *= DAMPING;
+        l.vty  *= DAMPING;
+        l.vrot *= DAMPING;
+
+        // Integrate
+        l.tx  += l.vtx;
+        l.ty  += l.vty;
+        l.rot += l.vrot;
+        l.rot  = Math.max(-MAX_ROT, Math.min(MAX_ROT, l.rot));
+
+        // Apply transform
+        l.el.style.transform = `translate(${l.tx.toFixed(1)}px,${l.ty.toFixed(1)}px) rotate(${l.rot.toFixed(1)}deg)`;
+
+        // Color shift cream → gold based on displacement
+        const disp   = Math.sqrt(l.tx * l.tx + l.ty * l.ty);
+        const colorT = Math.min(disp / 60, 1);
+        if (colorT > 0.03) {
+          const [r, g, b] = lerpColor(COL_BASE, COL_HOT, colorT * 0.85);
+          l.el.style.color = `rgb(${r},${g},${b})`;
+          const gs = Math.round(colorT * 22);
+          const ga = (colorT * 0.4).toFixed(2);
+          l.el.style.textShadow = `0 0 ${gs}px rgba(184,135,74,${ga})`;
+        } else {
+          l.el.style.color = '';
+          l.el.style.textShadow = '';
+        }
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    // ── START ────────────────────────────────────────────────────────────────
+    document.fonts.ready.then(() => {
+      initLetters();
+      tick();
+    });
+  </script>
+</body>
+</html>
